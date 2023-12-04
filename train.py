@@ -88,8 +88,8 @@ class MaskDecoderDT(MaskDecoder):
         vit_dim_dict = {"vit_b": 768, "vit_l": 1024, "vit_h": 1280}
         vit_dim = vit_dim_dict[model_type]
 
-        self.hf_token = nn.Embedding(1, transformer_dim)
-        self.hf_mlp = MLP(transformer_dim, transformer_dim, transformer_dim // 8, 3)
+        self.dt_token = nn.Embedding(1, transformer_dim)
+        self.dt_mlp = MLP(transformer_dim, transformer_dim, transformer_dim // 8, 3)
         self.num_mask_tokens = self.num_mask_tokens + 1
 
         self.compress_vit_feat = nn.ModuleList(
@@ -130,7 +130,7 @@ class MaskDecoderDT(MaskDecoder):
             sparse_prompt_embeddings: torch.Tensor,
             dense_prompt_embeddings: torch.Tensor,
             multimask_output: bool,
-            hq_token_only: bool,
+            dt_token_only: bool,
             interm_embeddings: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
@@ -150,12 +150,10 @@ class MaskDecoderDT(MaskDecoder):
 
         vit_features = [emb.permute(0, 3, 1, 2) for emb in interm_embeddings]
         last_features = self.embedding_encoder(image_embeddings)
-        interm_map_0 = self.compress_vit_feat[0](vit_features[0])
-        interm_map_1 = self.compress_vit_feat[1](vit_features[1])
-        interm_map_2 = self.compress_vit_feat[2](vit_features[2])
-        combined_map = torch.cat([interm_map_0, interm_map_1, interm_map_2, last_features], dim = 1)
+        interm_maps = [self.compress_vit_feat[i](emb) for i, emb in enumerate(vit_features)]
+        combined_map = torch.cat(interm_maps + [last_features], dim=1)
 
-        ft_features = self.selayer(combined_map)
+        dt_features = self.selayer(combined_map)
 
 
         batch_len = len(image_embeddings)
@@ -167,7 +165,7 @@ class MaskDecoderDT(MaskDecoder):
                 image_pe=image_pe[i_batch],
                 sparse_prompt_embeddings=sparse_prompt_embeddings[i_batch],
                 dense_prompt_embeddings=dense_prompt_embeddings[i_batch],
-                dt_feature=ft_features[i_batch].unsqueeze(0)
+                dt_feature=dt_features[i_batch].unsqueeze(0)
             )
             masks.append(mask)
             iou_preds.append(iou_pred)
@@ -190,7 +188,7 @@ class MaskDecoderDT(MaskDecoder):
 
         masks_hq = masks[:, slice(self.num_mask_tokens - 1, self.num_mask_tokens), :, :]
 
-        if hq_token_only:
+        if dt_token_only:
             return masks_hq
         else:
             return masks_sam, masks_hq
@@ -205,7 +203,7 @@ class MaskDecoderDT(MaskDecoder):
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Predicts masks. See 'forward' for more details."""
 
-        output_tokens = torch.cat([self.iou_token.weight, self.mask_tokens.weight, self.hf_token.weight], dim=0)
+        output_tokens = torch.cat([self.iou_token.weight, self.mask_tokens.weight, self.dt_token.weight], dim=0)
         output_tokens = output_tokens.unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
         tokens = torch.cat((output_tokens, sparse_prompt_embeddings), dim=1)
 
@@ -231,7 +229,7 @@ class MaskDecoderDT(MaskDecoder):
             if i < 4:
                 hyper_in_list.append(self.output_hypernetworks_mlps[i](mask_tokens_out[:, i, :]))
             else:
-                hyper_in_list.append(self.hf_mlp(mask_tokens_out[:, i, :]))
+                hyper_in_list.append(self.dt_mlp(mask_tokens_out[:, i, :]))
 
         hyper_in = torch.stack(hyper_in_list, dim=1)
         b, c, h, w = upscaled_embedding_sam.shape
@@ -312,12 +310,6 @@ def get_args_parser():
     parser.add_argument('--batch_size_valid', default=1, type=int)
     parser.add_argument('--model_save_fre', default=1, type=int)
 
-    parser.add_argument('--world_size', default=1, type=int,
-                        help='number of distributed processes')
-    parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
-    parser.add_argument('--rank', default=0, type=int,
-                        help='number of distributed processes')
-    parser.add_argument('--local_rank', type=int, help='local rank for dist')
     parser.add_argument('--find_unused_params', action='store_true')
 
     parser.add_argument('--eval', action='store_true')
@@ -330,9 +322,6 @@ def get_args_parser():
 
 def main(net, train_datasets, valid_datasets, args):
     misc.init_distributed_mode(args)
-    print('world size: {}'.format(args.world_size))
-    print('rank: {}'.format(args.rank))
-    print('local_rank: {}'.format(args.local_rank))
     print("args: " + str(args) + '\n')
 
     seed = args.seed + misc.get_rank()
@@ -392,7 +381,6 @@ def train(args, net, optimizer, train_dataloaders, valid_dataloaders, lr_schedul
 
     epoch_start = args.start_epoch
     epoch_num = args.max_epoch_num
-    train_num = len(train_dataloaders)
 
     net.train()
     net.to(device=args.device)
@@ -497,7 +485,7 @@ def train(args, net, optimizer, train_dataloaders, valid_dataloaders, lr_schedul
     # Finish training
     print("Training Reaches The Maximum Epoch Number")
 
-    # merge sam and hq_decoder
+    # merge sam and dt_decoder
     if misc.is_main_process():
         sam_ckpt = torch.load(args.checkpoint)
         hq_decoder = torch.load(args.output + model_name)
@@ -505,7 +493,7 @@ def train(args, net, optimizer, train_dataloaders, valid_dataloaders, lr_schedul
             sam_key = 'mask_decoder.' + key
             if sam_key not in sam_ckpt.keys():
                 sam_ckpt[sam_key] = hq_decoder[key]
-        model_name = "/sam_hq_epoch_" + str(epoch) + ".pth"
+        model_name = "/dt_sam_epoch_" + str(epoch) + ".pth"
         torch.save(sam_ckpt, args.output + model_name)
 
 
@@ -572,7 +560,7 @@ def evaluate(args, net, sam, valid_dataloaders, visualize=False):
                 # elif input_type == 'noise_mask':
                 #     dict_input['mask_inputs'] = labels_noisemask[b_i:b_i + 1]
                 # else:
-                    raise NotImplementedError
+                #     raise NotImplementedError
                 dict_input['original_size'] = imgs[b_i].shape[:2]
                 batched_input.append(dict_input)
 
@@ -585,7 +573,7 @@ def evaluate(args, net, sam, valid_dataloaders, visualize=False):
             sparse_embeddings = [batched_output[i_l]['sparse_embeddings'] for i_l in range(batch_len)]
             dense_embeddings = [batched_output[i_l]['dense_embeddings'] for i_l in range(batch_len)]
 
-            masks_sam, masks_hq = net(
+            masks_sam, masks_dt = net(
                 image_embeddings=encoder_embedding,
                 image_pe=image_pe,
                 sparse_prompt_embeddings=sparse_embeddings,
@@ -595,13 +583,13 @@ def evaluate(args, net, sam, valid_dataloaders, visualize=False):
                 interm_embeddings=interm_embeddings,
             )
 
-            iou = compute_iou(masks_hq, labels_ori)
-            boundary_iou = compute_boundary_iou(masks_hq, labels_ori)
+            iou = compute_iou(masks_dt, labels_ori)
+            boundary_iou = compute_boundary_iou(masks_dt, labels_ori)
 
             if visualize:
                 print("visualize")
                 os.makedirs(args.output, exist_ok=True)
-                masks_hq_vis = (F.interpolate(masks_hq.detach(), (1024, 1024), mode="bilinear",
+                masks_hq_vis = (F.interpolate(masks_dt.detach(), (1024, 1024), mode="bilinear",
                                               align_corners=False) > 0).cpu()
                 for ii in range(len(imgs)):
                     base = data_val['imidx'][ii].item()
@@ -721,12 +709,9 @@ if __name__ == "__main__":
                          "im_ext": ".JPG",
                          "gt_ext": ".png"}
 
-    # train_datasets = [dataset_dis, dataset_thin, dataset_fss, dataset_duts, dataset_duts_te, dataset_ecssd,
-    #                   dataset_msra]
     train_datasets = [dataset_dis, dataset_thin, dataset_fss, dataset_duts, dataset_duts_te, dataset_ecssd,
                       dataset_msra, dataset_mvtec, dataset_visa]
 
-    # valid_datasets = [dataset_dis_val, dataset_coift_val, dataset_hrsod_val, dataset_thin_val]
     valid_datasets = [dataset_dis_val, dataset_coift_val, dataset_hrsod_val, dataset_thin_val, dataset_mvtec_val, dataset_visa_val]
 
     args = get_args_parser()

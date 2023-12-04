@@ -126,12 +126,12 @@ class MaskDecoderDT(nn.Module):
           torch.Tensor: batched predicted masks
           torch.Tensor: batched predictions of mask quality
         """
-        # vit_features = interm_embeddings[0].permute(0, 3, 1, 2) # early-layer ViT feature, after 1st global attention block in ViT
         vit_features = [emb.permute(0, 3, 1, 2) for emb in interm_embeddings]
-        # hq_features = self.embedding_encoder(image_embeddings) + self.compress_vit_feat(vit_features)
-        hq_features = self.embedding_encoder(image_embeddings)
-        for i in range(3):
-            hq_features += self.compress_vit_feat[i](vit_features[i])
+        last_features = self.embedding_encoder(image_embeddings)
+        interm_maps = [self.compress_vit_feat[i](emb) for i, emb in enumerate(vit_features)]
+        combined_map = torch.cat(interm_maps + [last_features], dim=1)
+
+        dt_features = self.selayer(combined_map)
 
 
         masks, iou_pred = self.predict_masks(
@@ -139,7 +139,7 @@ class MaskDecoderDT(nn.Module):
             image_pe=image_pe,
             sparse_prompt_embeddings=sparse_prompt_embeddings,
             dense_prompt_embeddings=dense_prompt_embeddings,
-            hq_features=hq_features,
+            dt_features=dt_features,
         )
 
         # Select the correct mask or masks for output
@@ -171,7 +171,7 @@ class MaskDecoderDT(nn.Module):
         image_pe: torch.Tensor,
         sparse_prompt_embeddings: torch.Tensor,
         dense_prompt_embeddings: torch.Tensor,
-        hq_features: torch.Tensor,
+        dt_features: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Predicts masks. See 'forward' for more details."""
         # Concatenate output tokens
@@ -194,7 +194,7 @@ class MaskDecoderDT(nn.Module):
         src = src.transpose(1, 2).view(b, c, h, w)
 
         upscaled_embedding_sam = self.output_upscaling(src)
-        upscaled_embedding_hq = self.embedding_maskfeature(upscaled_embedding_sam) + hq_features.repeat(b,1,1,1)
+        upscaled_embedding_hq = self.embedding_maskfeature(upscaled_embedding_sam) + dt_features.repeat(b, 1, 1, 1)
 
         hyper_in_list: List[torch.Tensor] = []
         for i in range(self.num_mask_tokens):
