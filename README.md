@@ -1,9 +1,9 @@
-# DTSAM
+# DT-SAM
 
 Welcome to the GitHub repository for the implementation code of my Master's Thesis. This repository contains all the code and resources used in my thesis titled 'Adapting Segment Anything Model for Industrial Image Segmentation'.
 
 
-## Usage
+
 
 I organize the folder as follows.
 
@@ -24,7 +24,7 @@ To Train DT-SAM
 python train.py --checkpoint <path/to/checkpoint> --model-type <model_type> --output <path/to/output>
 ```
 
-## Evaludation
+## Evaluation
 
 To evaluate DT-SAM
 

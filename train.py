@@ -6,9 +6,7 @@ import torch
 import torch.optim as optim
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.autograd import Variable
 import matplotlib.pyplot as plt
-import cv2
 import random
 from typing import Dict, List, Tuple
 
@@ -154,7 +152,6 @@ class MaskDecoderDT(MaskDecoder):
         combined_map = torch.cat(interm_maps + [last_features], dim=1)
 
         dt_features = self.selayer(combined_map)
-
 
         batch_len = len(image_embeddings)
         masks = []
@@ -488,11 +485,11 @@ def train(args, net, optimizer, train_dataloaders, valid_dataloaders, lr_schedul
     # merge sam and dt_decoder
     if misc.is_main_process():
         sam_ckpt = torch.load(args.checkpoint)
-        hq_decoder = torch.load(args.output + model_name)
-        for key in hq_decoder.keys():
+        dt_decoder = torch.load(args.output + model_name)
+        for key in dt_decoder.keys():
             sam_key = 'mask_decoder.' + key
             if sam_key not in sam_ckpt.keys():
-                sam_ckpt[sam_key] = hq_decoder[key]
+                sam_ckpt[sam_key] = dt_decoder[key]
         model_name = "/dt_sam_epoch_" + str(epoch) + ".pth"
         torch.save(sam_ckpt, args.output + model_name)
 
