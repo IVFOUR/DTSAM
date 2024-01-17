@@ -148,8 +148,10 @@ class MaskDecoderDT(MaskDecoder):
 
         vit_features = [emb.permute(0, 3, 1, 2) for emb in interm_embeddings]
         last_features = self.embedding_encoder(image_embeddings)
-        interm_maps = [self.compress_vit_feat[i](emb) for i, emb in enumerate(vit_features)]
-        combined_map = torch.cat(interm_maps + [last_features], dim=1)
+        interm_map_0 = self.compress_vit_feat[0](vit_features[0])
+        interm_map_1 = self.compress_vit_feat[1](vit_features[1])
+        interm_map_2 = self.compress_vit_feat[2](vit_features[2])
+        combined_map = torch.cat([interm_map_0, interm_map_1, interm_map_2, last_features], dim = 1)
 
         dt_features = self.selayer(combined_map)
 
@@ -383,7 +385,7 @@ def train(args, net, optimizer, train_dataloaders, valid_dataloaders, lr_schedul
     net.to(device=args.device)
 
     sam = sam_model_registry[args.model_type](checkpoint=args.checkpoint)
-    sam.to(device=args.device)
+    _ = sam.to(device=args.device)
 
     for epoch in range(epoch_start, epoch_num):
         print("epoch:   ", epoch, "  learning rate:  ", optimizer.param_groups[0]["lr"])
@@ -443,7 +445,7 @@ def train(args, net, optimizer, train_dataloaders, valid_dataloaders, lr_schedul
                 sparse_prompt_embeddings=sparse_embeddings,
                 dense_prompt_embeddings=dense_embeddings,
                 multimask_output=False,
-                hq_token_only=True,
+                dt_token_only=True,
                 interm_embeddings=interm_embeddings,
             )
 
@@ -576,7 +578,7 @@ def evaluate(args, net, sam, valid_dataloaders, visualize=False):
                 sparse_prompt_embeddings=sparse_embeddings,
                 dense_prompt_embeddings=dense_embeddings,
                 multimask_output=False,
-                hq_token_only=False,
+                dt_token_only=False,
                 interm_embeddings=interm_embeddings,
             )
 
@@ -710,6 +712,7 @@ if __name__ == "__main__":
                       dataset_msra, dataset_mvtec, dataset_visa]
 
     valid_datasets = [dataset_dis_val, dataset_coift_val, dataset_hrsod_val, dataset_thin_val, dataset_mvtec_val, dataset_visa_val]
+    # valid_datasets = [dataset_mvtec_val]
 
     args = get_args_parser()
     net = MaskDecoderDT(args.model_type)
