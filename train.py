@@ -1,4 +1,3 @@
-
 import os
 import argparse
 import numpy as np
@@ -359,6 +358,8 @@ def main(net, train_datasets, valid_datasets, args):
         lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, args.lr_drop_epoch)
         lr_scheduler.last_epoch = args.start_epoch
 
+        net.to(device=args.device)
+
         train(args, net, optimizer, train_dataloaders, valid_dataloaders, lr_scheduler)
     else:
         sam = sam_model_registry[args.model_type](checkpoint=args.checkpoint)
@@ -370,6 +371,8 @@ def main(net, train_datasets, valid_datasets, args):
                 net.load_state_dict(torch.load(args.restore_model))
             else:
                 net.load_state_dict(torch.load(args.restore_model, map_location="cpu"))
+
+        net.to(device=args.device)
 
         evaluate(args, net, sam, valid_dataloaders, args.visualize)
 
@@ -521,6 +524,10 @@ def compute_boundary_iou(preds, target):
 
 
 def evaluate(args, net, sam, valid_dataloaders, visualize=False):
+    if visualize:
+        import matplotlib
+        matplotlib.use('Agg')  # Use the 'Agg' backend for rendering plots
+
     net.eval()
     print("Validating...")
     test_stats = {}
