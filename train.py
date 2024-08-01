@@ -184,12 +184,12 @@ class MaskDecoderDT(MaskDecoder):
             mask_slice = slice(0, 1)
             masks_sam = masks[:, mask_slice]
 
-        masks_hq = masks[:, slice(self.num_mask_tokens - 1, self.num_mask_tokens), :, :]
+        dt_masks = masks[:, slice(self.num_mask_tokens - 1, self.num_mask_tokens), :, :]
 
         if dt_token_only:
-            return masks_hq
+            return dt_masks
         else:
-            return masks_sam, masks_hq
+            return masks_sam, dt_masks
 
     def predict_masks(
             self,
