@@ -1,6 +1,9 @@
 *.zip
 *.log
 *.pth
+*.idea
+
+
 data/
 Data&checkpoint/
 output/
