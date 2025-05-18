@@ -714,12 +714,22 @@ if __name__ == "__main__":
                          "gt_dir": "./data/VisA_unified/test/labels",
                          "im_ext": ".JPG",
                          "gt_ext": ".png"}
-
+    dataset_vessel = {"name": "vessel",
+                         "im_dir": "./data/Vessel/test/image",
+                         "gt_dir": "./data/Vessel/test/labels",
+                         "im_ext": ".JPG",
+                         "gt_ext": ".png"}	
     train_datasets = [dataset_dis, dataset_thin, dataset_fss, dataset_duts, dataset_duts_te, dataset_ecssd,
-                      dataset_msra, dataset_mvtec, dataset_visa]
+                       dataset_msra]
+    #train_datasets = [dataset_dis, dataset_thin, dataset_fss, dataset_duts, dataset_duts_te, dataset_ecssd,
+    #                   dataset_msra, dataset_mvtec, dataset_visa]
+    #train_datasets = [dataset_dis, dataset_thin, dataset_fss, dataset_duts, dataset_duts_te, dataset_ecssd,
+    #                  dataset_msra]
 
-    valid_datasets = [dataset_dis_val, dataset_coift_val, dataset_hrsod_val, dataset_thin_val, dataset_mvtec_val, dataset_visa_val]
-    # valid_datasets = [dataset_mvtec_val]
+    
+    #valid_datasets = [dataset_dis_val, dataset_coift_val, dataset_hrsod_val, dataset_thin_val, dataset_mvtec_val, dataset_visa_val]
+    #valid_datasets = [dataset_dis_val, dataset_coift_val, dataset_hrsod_val, dataset_thin_val]
+    valid_datasets = [dataset_vessel]
 
     args = get_args_parser()
     net = MaskDecoderDT(args.model_type)

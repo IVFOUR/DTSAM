@@ -1,0 +1,9 @@
+*.zip
+*.log
+*.pth
+data/
+Data&checkpoint/
+output/
+pretrained_checkpoint/
+work_dirs/
+eval_coco/ckpt/
