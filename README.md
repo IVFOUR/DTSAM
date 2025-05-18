@@ -1,6 +1,6 @@
 # DT-SAM
 
-Welcome to the GitHub repository for the implementation code of my Master's Thesis. This repository contains all the code and resources used in my thesis titled 'Adapting Segment Anything Model for Industrial Image Segmentation'.
+Welcome to the GitHub repository for the implementation code of my Master's Thesis. This repository contains all the code and resources used in my thesis titled 'DT-SAM: Optimizing SAM for Specialized Domains and Tasks'.
 
 
                                             

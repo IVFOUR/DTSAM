@@ -115,7 +115,7 @@ class MaskDecoderDT(nn.Module):
         sparse_prompt_embeddings: torch.Tensor,
         dense_prompt_embeddings: torch.Tensor,
         multimask_output: bool,
-        hq_token_only: bool,
+        dt_only: bool,
         interm_embeddings: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
@@ -164,11 +164,11 @@ class MaskDecoderDT(nn.Module):
             iou_pred = iou_pred[:,mask_slice]
             masks_sam = masks[:,mask_slice]
 
-        masks_hq = masks[:,slice(self.num_mask_tokens-1, self.num_mask_tokens)]
-        if hq_token_only:
-            masks = masks_hq
+        dt_masks = masks[:,slice(self.num_mask_tokens-1, self.num_mask_tokens)]
+        if dt_only:
+            masks = dt_masks
         else:
-            masks = masks_sam + masks_hq
+            masks = masks_sam + dt_masks
         # Prepare output
         return masks, iou_pred
 
@@ -201,7 +201,7 @@ class MaskDecoderDT(nn.Module):
         src = src.transpose(1, 2).view(b, c, h, w)
 
         upscaled_embedding_sam = self.output_upscaling(src)
-        upscaled_embedding_hq = self.embedding_maskfeature(upscaled_embedding_sam) + dt_features.repeat(b, 1, 1, 1)
+        upscaled_embedding_et = self.embedding_maskfeature(upscaled_embedding_sam) + dt_features.repeat(b, 1, 1, 1)
 
         hyper_in_list: List[torch.Tensor] = []
         for i in range(self.num_mask_tokens):
@@ -214,7 +214,7 @@ class MaskDecoderDT(nn.Module):
         b, c, h, w = upscaled_embedding_sam.shape
 
         masks_sam = (hyper_in[:,:self.num_mask_tokens-1] @ upscaled_embedding_sam.view(b, c, h * w)).view(b, -1, h, w)
-        masks_sam_hq = (hyper_in[:,self.num_mask_tokens-1:] @ upscaled_embedding_hq.view(b, c, h * w)).view(b, -1, h, w)
+        masks_sam_hq = (hyper_in[:,self.num_mask_tokens-1:] @ upscaled_embedding_et.view(b, c, h * w)).view(b, -1, h, w)
         masks = torch.cat([masks_sam,masks_sam_hq],dim=1)
         # Generate mask quality predictions
         iou_pred = self.iou_prediction_head(iou_token_out)
@@ -222,8 +222,7 @@ class MaskDecoderDT(nn.Module):
         return masks, iou_pred
 
 
-# Lightly adapted from
-# https://github.com/facebookresearch/MaskFormer/blob/main/mask_former/modeling/transformer/transformer_predictor.py # noqa
+
 class MLP(nn.Module):
     def __init__(
         self,

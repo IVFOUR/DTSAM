@@ -127,7 +127,7 @@ class MaskDecoderDT(MaskDecoder):
             sparse_prompt_embeddings: torch.Tensor,
             dense_prompt_embeddings: torch.Tensor,
             multimask_output: bool,
-            dt_token_only: bool,
+            dt_only: bool,
             interm_embeddings: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
@@ -184,12 +184,12 @@ class MaskDecoderDT(MaskDecoder):
             mask_slice = slice(0, 1)
             masks_sam = masks[:, mask_slice]
 
-        masks_hq = masks[:, slice(self.num_mask_tokens - 1, self.num_mask_tokens), :, :]
+        dt_masks = masks[:, slice(self.num_mask_tokens - 1, self.num_mask_tokens), :, :]
 
-        if dt_token_only:
-            return masks_hq
+        if dt_only:
+            return dt_masks
         else:
-            return masks_sam, masks_hq
+            return masks_sam, dt_masks
 
     def predict_masks(
             self,
@@ -448,7 +448,7 @@ def train(args, net, optimizer, train_dataloaders, valid_dataloaders, lr_schedul
                 sparse_prompt_embeddings=sparse_embeddings,
                 dense_prompt_embeddings=dense_embeddings,
                 multimask_output=False,
-                dt_token_only=True,
+                dt_only=True,
                 interm_embeddings=interm_embeddings,
             )
 
@@ -585,7 +585,7 @@ def evaluate(args, net, sam, valid_dataloaders, visualize=False):
                 sparse_prompt_embeddings=sparse_embeddings,
                 dense_prompt_embeddings=dense_embeddings,
                 multimask_output=False,
-                dt_token_only=False,
+                dt_only=False,
                 interm_embeddings=interm_embeddings,
             )
 
